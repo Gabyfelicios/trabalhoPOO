@@ -439,43 +439,49 @@ class ShopApp(ft.Column):
         ]
         self._update_page_content(content)
 
-    def show_fechar_pedido(self, e):
-        self.cart_items = listar_carrinho()
-        if not self.cart_items:
-            self.show_snackbar("Carrinho vazio. Nada para finalizar.", ft.Colors.ORANGE_500)
-            self.show_main_menu()
-            return
+def show_fechar_pedido(self, e):
+    self.cart_items = listar_carrinho()
+    if not self.cart_items:
+        self.show_snackbar("Carrinho vazio. Nada para finalizar.", ft.Colors.ORANGE_500)
+        self._update_page_content([  
+            ft.Text("Carrinho Vazio", size=20, weight=ft.FontWeight.BOLD),
+            ft.Text("Seu carrinho está vazio. Adicione produtos antes de finalizar."),
+            ft.ElevatedButton("Voltar ao Menu", on_click=self.show_main_menu)
+        ])
+        return
 
-        self.total_value = sum(item[2] * item[5] for item in self.cart_items)
+    self.total_value = sum(item[2] * item[5] for item in self.cart_items)
 
-        resume_rows = []
-        for item in self.cart_items:
-            resume_rows.append(
-                ft.Text(f"{item[1]} (x{item[5]}) - Total: {formata_float_str_moeda(item[2] * item[5])}")
-            )
-
-        self.payment_method_radio_group = ft.RadioGroup(
-            content=ft.Row(
-                [
-                    ft.Radio(value="pix", label="Pix"),
-                    ft.Radio(value="card", label="Cartão de Crédito (Simulado)"),
-                    ft.Radio(value="cash", label="Dinheiro (Simulado)"),
-                ]
-            )
+    resume_rows = []
+    for item in self.cart_items:
+        resume_rows.append(
+            ft.Text(f"{item[1]} (x{item[5]}) - Total: {formata_float_str_moeda(item[2] * item[5])}")
         )
 
-        content = [
-            ft.Text("Resumo do Pedido", size=20, weight=ft.FontWeight.BOLD),
-            ft.Column(resume_rows),
-            ft.Text(f"\nTotal a pagar: {formata_float_str_moeda(self.total_value)}", size=18,
-                    weight=ft.FontWeight.BOLD),
-            ft.Divider(),
-            ft.Text("Escolha o método de pagamento:", size=16),
-            self.payment_method_radio_group,
-            ft.ElevatedButton("Finalizar Pagamento", on_click=self.process_payment),
-            ft.TextButton("Voltar ao Menu", on_click=self.show_main_menu)
-        ]
-        self._update_page_content(content)
+    self.payment_method_radio_group = ft.RadioGroup(
+        content=ft.Row(
+            [
+                ft.Radio(value="pix", label="Pix"),
+                ft.Radio(value="card", label="Cartão de Crédito (Simulado)"),
+                ft.Radio(value="cash", label="Dinheiro (Simulado)"),
+            ]
+        ),
+        value="pix"  
+    )
+
+    content = [
+        ft.Text("Resumo do Pedido", size=20, weight=ft.FontWeight.BOLD),
+        ft.Column(resume_rows),
+        ft.Text(f"\nTotal a pagar: {formata_float_str_moeda(self.total_value)}", size=18,
+                weight=ft.FontWeight.BOLD),
+        ft.Divider(),
+        ft.Text("Escolha o método de pagamento:", size=16),
+        self.payment_method_radio_group,
+        ft.ElevatedButton("Finalizar Pagamento", on_click=self.process_payment),
+        ft.TextButton("Voltar ao Menu", on_click=self.show_main_menu)
+    ]
+    self._update_page_content(content)
+    self.page.update()  
 
     def process_payment(self, e):
         selected_method = self.payment_method_radio_group.value
