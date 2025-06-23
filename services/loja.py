@@ -3,6 +3,7 @@ import os
 import shutil
 import random
 from datetime import datetime
+import asyncio
 
 from database.db import (
     salvar_produto,
@@ -25,10 +26,11 @@ IMAGE_DIR = "product_images"
 
 
 class ShopApp(ft.Column):
-    def __init__(self, page: ft.Page):
+    def __init__(self, page: ft.Page, snackbar_text: ft.Text):
         super().__init__()
         self.page = page
         self.page.clean()
+        self.snackbar_text = snackbar_text
 
         self.page.appbar = ft.AppBar(
             title=ft.Text("POO Shop - Loja Virtual", weight=ft.FontWeight.BOLD),
@@ -94,13 +96,9 @@ class ShopApp(ft.Column):
         ]
         self._update_page_content(menu_content)
 
-    def show_snackbar(self, message, color=ft.Colors.GREEN_600):
-        self.page.snack_bar = ft.SnackBar(
-            ft.Text(message),
-            open=True,
-            bgcolor=color,
-            duration=2000
-        )
+    def show_snackbar(self, message: str, color=ft.Colors.GREEN_500):
+        self.snackbar_text.value = message
+        self.page.snack_bar.bgcolor = color
         self.page.snack_bar.open = True
         self.page.update()
 
@@ -324,7 +322,7 @@ class ShopApp(ft.Column):
             product = pegar_produto_por_id(product_id)
             if product:
                 adicionar_ao_carrinho(product[0])
-                self.show_snackbar(f"Produto '{product[1]}' adicionado ao carrinho!",ft.Colors.GREEN_600)
+                self.show_snackbar(f"Produto '{product[1]}' adicionado ao carrinho!", ft.Colors.GREEN_600)
                 self.buy_product_id_input.value = "" # Limpa o campo
             else:
                 self.show_snackbar("Produto não encontrado.", ft.Colors.RED_500)
@@ -387,56 +385,50 @@ class ShopApp(ft.Column):
         ]
         self._update_page_content(content)
 
-
     def show_visualizar_carrinho(self, e):
         cart_items = listar_carrinho()
         cart_rows = []
+
         if cart_items:
-            cart_rows.append(
-                ft.DataRow(
-                    cells=[
-                        ft.DataCell(ft.Text("Produto")),
-                        ft.DataCell(ft.Text("Qtd.")),
-                        ft.DataCell(ft.Text("Preço Unit.")),
-                        ft.DataCell(ft.Text("Total Item")),
-                    ],
-                )
-            )
             for item in cart_items:
                 total_item = item[2] * item[5]
                 cart_rows.append(
                     ft.DataRow(
                         cells=[
-                            ft.DataCell(ft.Text(item[1])),
-                            ft.DataCell(ft.Text(str(item[5]))),
-                            ft.DataCell(ft.Text(formata_float_str_moeda(item[2]))),
-                            ft.DataCell(ft.Text(formata_float_str_moeda(total_item))),
+                            ft.DataCell(ft.Text(item[1])),  # Nome do produto
+                            ft.DataCell(ft.Text(str(item[5]))),  # Quantidade
+                            ft.DataCell(ft.Text(formata_float_str_moeda(item[2]))),  # Preço unit.
+                            ft.DataCell(ft.Text(formata_float_str_moeda(total_item))),  # Total item
                         ],
                     )
                 )
+
+            cart_table = ft.DataTable(
+                columns=[
+                    ft.DataColumn(ft.Text("Produto")),
+                    ft.DataColumn(ft.Text("Qtd.")),
+                    ft.DataColumn(ft.Text("Preço Unit.")),
+                    ft.DataColumn(ft.Text("Total Item")),
+                ],
+                rows=cart_rows,
+                width=600,
+                show_checkbox_column=False,
+                heading_row_color=ft.Colors.BLUE_GREY_100,
+                border=ft.border.all(1, ft.Colors.GREY),
+                divider_thickness=1
+            )
+
+            content = [
+                ft.Text("Seu Carrinho de Compras", size=20, weight=ft.FontWeight.BOLD),
+                ft.Container(cart_table, padding=10, border_radius=ft.border_radius.all(5)),
+            ]
         else:
-            cart_rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("Carrinho vazio.", col_span=4))]))
+            content = [
+                ft.Text("Seu Carrinho de Compras", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text("Carrinho vazio.", size=16, color=ft.Colors.GREY_700),
+            ]
 
-        cart_table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Produto")),
-                ft.DataColumn(ft.Text("Qtd.")),
-                ft.DataColumn(ft.Text("Preço Unit.")),
-                ft.DataColumn(ft.Text("Total Item")),
-            ],
-            rows=cart_rows,
-            width=600,
-            show_checkbox_column=False,
-            heading_row_color=ft.Colors.BLUE_GREY_100,
-            border=ft.border.all(1, ft.Colors.GREY),
-            divider_thickness=1
-        )
-
-        content = [
-            ft.Text("Seu Carrinho de Compras", size=20, weight=ft.FontWeight.BOLD),
-            ft.Container(cart_table, padding=10, border_radius=ft.border_radius.all(5)),
-            ft.ElevatedButton("Voltar ao Menu", on_click=self.show_main_menu)
-        ]
+        content.append(ft.ElevatedButton("Voltar ao Menu", on_click=self.show_main_menu))
         self._update_page_content(content)
 
     def show_fechar_pedido(self, e):
@@ -483,29 +475,38 @@ class ShopApp(ft.Column):
         self._update_page_content(content)
         self.page.update()         
 
-    def process_payment(self, e):
+    async def process_payment(self, e):
         selected_method = self.payment_method_radio_group.value
+        print(f"Processando pagamento via: {selected_method}")
 
         if not selected_method:
             self.show_snackbar("Por favor, selecione um método de pagamento.", ft.Colors.ORANGE_500)
             return
 
         if selected_method == 'pix':
+            print("Chamando _simulate_pix_payment")
             self.show_snackbar("Iniciando simulação de pagamento via Pix...", ft.Colors.BLUE_400)
-            self.page.run_async(self._simulate_pix_payment)
+            await self._simulate_pix_payment()
         elif selected_method == 'card':
             self.show_snackbar("Iniciando simulação de pagamento via Cartão de Crédito...",
                                ft.Colors.BLUE_400)
-            self.page.run_async(self._simulate_card_payment)
+            await self._simulate_card_payment()
         elif selected_method == 'cash':
             self.show_snackbar("Iniciando simulação de pagamento via Dinheiro...", ft.Colors.BLUE_400)
-            self.page.run_async(self._simulate_cash_payment)
+            await self._simulate_cash_payment()
         else:
             self.show_snackbar("Método de pagamento inválido.", ft.Colors.RED_500)
             self.show_main_menu()
 
     async def _simulate_pix_payment(self):
-        await self.page.run_async(lambda: self._update_page_content(
+        print("Dentro de _simulate_pix_payment")
+
+        async def simular_pagamento_concluido(e):
+            await self._finalize_order_after_payment("Pix")
+
+        async def cancelar_pagamento(e):
+            await self._cancel_order("Pix")
+        self._update_page_content(
             [
                 ft.Text("--- SIMULAÇÃO DE PAGAMENTO VIA PIX ---", size=20, weight=ft.FontWeight.BOLD),
                 ft.Text(f"Valor a pagar: {formata_float_str_moeda(self.total_value)}", size=18),
@@ -519,31 +520,27 @@ class ShopApp(ft.Column):
                 ),
                 ft.Text("AVISO: ESTE É UM PAGAMENTO SIMULADO E NÃO EFETIVARÁ UMA TRANSFERÊNCIA REAL.",
                         color=ft.Colors.RED_600),
-                ft.ElevatedButton("Simular Pagamento Concluído",
-                                  on_click=lambda e: self.page.run_async(self._finalize_order_after_payment("Pix"))),
-                ft.ElevatedButton("Cancelar Pagamento",
-                                  on_click=lambda e: self.page.run_async(self._cancel_order("Pix"))),
+                ft.ElevatedButton(text="Simular Pagamento Concluído", on_click=simular_pagamento_concluido),
+                ft.ElevatedButton(text="Cancelar Pagamento", on_click=cancelar_pagamento),
             ]
-        ))
-        await self.page.update_async()
+        )
+        print("Conteúdo da página de Pix atualizado.")
+        self.page.update() # Para depuração
 
     async def _simulate_card_payment(self):
-        card_number_input = ft.TextField(label="Número do Cartão (simulado)", width=300,
-                                         keyboard_type=ft.KeyboardType.NUMBER)
+        card_number_input = ft.TextField(label="Número do Cartão (simulado)", width=300,keyboard_type=ft.KeyboardType.NUMBER)
         card_expiry_input = ft.TextField(label="Validade (MM/AA)", width=150)
         card_cvv_input = ft.TextField(label="CVV (simulado)", width=100, password=True)
 
         async def complete_card_payment(e):
             if not card_number_input.value or not card_expiry_input.value or not card_cvv_input.value:
-                self.show_snackbar("Por favor, preencha todos os campos do cartão.",
-                                   ft.Colors.RED_500)
+                self.show_snackbar("Por favor, preencha todos os campos do cartão.", ft.Colors.RED_500)
                 return
-            self.show_snackbar("Processando pagamento com cartão de crédito simulado...",
-                               ft.Colors.BLUE_400)
-            await ft.async_sleep(1)
+            self.show_snackbar("Processando pagamento com cartão de crédito simulado...", ft.Colors.BLUE_400)
+            await asyncio.sleep(1)
             await self._finalize_order_after_payment("Cartão")
 
-        await self.page.run_async(lambda: self._update_page_content(
+        self._update_page_content(
             [
                 ft.Text("--- SIMULAÇÃO DE PAGAMENTO VIA CARTÃO DE CRÉDITO ---", size=20, weight=ft.FontWeight.BOLD),
                 ft.Text(f"Valor a pagar: {formata_float_str_moeda(self.total_value)}", size=18),
@@ -553,10 +550,45 @@ class ShopApp(ft.Column):
                         color=ft.Colors.RED_600),
                 ft.ElevatedButton("Pagar com Cartão", on_click=complete_card_payment),
                 ft.ElevatedButton("Cancelar Pagamento",
-                                  on_click=lambda e: self.page.run_async(self._cancel_order("Cartão"))),
+                                  on_click=lambda e: self._cancel_order("Cartão")),
             ]
-        ))
-        await self.page.update_async()
+        )
+        self.page.update()
+
+    async def _simulate_cash_payment(self):
+        amount_received_input = ft.TextField(label="Valor Recebido (simulado)", width=300,
+                                             keyboard_type=ft.KeyboardType.NUMBER)
+        troco_text = ft.Text("")
+
+        async def calculate_and_finalize_cash_payment(e):
+            try:
+                received = float(amount_received_input.value)
+                troco = received - self.total_value
+                if troco >= 0:
+                    troco_text.value = f"Troco: {formata_float_str_moeda(troco)}"
+                    self.show_snackbar("Pagamento em dinheiro simulado concluído.", ft.Colors.GREEN_600)
+                    await asyncio.sleep(1)
+                    await self._finalize_order_after_payment("Dinheiro")
+                else:
+                    troco_text.value = "Valor insuficiente."
+                    self.show_snackbar("Valor insuficiente. Pagamento em dinheiro simulado negado.", ft.Colors.RED_500)
+            except ValueError:
+                self.show_snackbar("Valor inválido. Digite um número.", ft.Colors.RED_500)
+            self.page.update()
+
+        self._update_page_content(
+            [
+                ft.Text("--- SIMULAÇÃO DE PAGAMENTO VIA DINHEIRO ---", size=20, weight=ft.FontWeight.BOLD),
+                ft.Text(f"Valor a Receber: {formata_float_str_moeda(self.total_value)}", size=18),
+                amount_received_input,
+                troco_text,
+                ft.Text("AVISO: ESTE É UM PAGAMENTO SIMULADO E NÃO EFETIVARÁ UMA TRANSFERÊNCIA REAL.",
+                        color=ft.Colors.RED_600),
+                ft.ElevatedButton("Confirmar Pagamento", on_click=calculate_and_finalize_cash_payment),
+                ft.ElevatedButton("Cancelar Pagamento", on_click=lambda e: self._cancel_order("Dinheiro")),
+            ]
+        )
+        self.page.update()
 
     async def _simulate_cash_payment(self):
         amount_received_input = ft.TextField(label="Valor Recebido (simulado)", width=300,
@@ -571,7 +603,7 @@ class ShopApp(ft.Column):
                     troco_text.value = f"Troco: {formata_float_str_moeda(troco)}"
                     self.show_snackbar("Pagamento em dinheiro simulado concluído.",
                                        ft.Colors.GREEN_600)
-                    await ft.async_sleep(1)
+                    await asyncio.sleep(1)
                     await self._finalize_order_after_payment("Dinheiro")
                 else:
                     troco_text.value = "Valor insuficiente."
@@ -581,7 +613,8 @@ class ShopApp(ft.Column):
                 self.show_snackbar("Valor inválido. Digite um número.", ft.Colors.RED_500)
             self.page.update()
 
-        await self.page.run_async(lambda: self._update_page_content(
+        # Remova 'await self.page.run_async(lambda: ...)'
+        self._update_page_content(
             [
                 ft.Text("--- SIMULAÇÃO DE PAGAMENTO VIA DINHEIRO ---", size=20, weight=ft.FontWeight.BOLD),
                 ft.Text(f"Valor a Receber: {formata_float_str_moeda(self.total_value)}", size=18),
@@ -593,7 +626,7 @@ class ShopApp(ft.Column):
                 ft.ElevatedButton("Cancelar Pagamento",
                                   on_click=lambda e: self.page.run_async(self._cancel_order("Dinheiro"))),
             ]
-        ))
+        )
         await self.page.update_async()
 
     async def _finalize_order_after_payment(self, method_name: str):
@@ -601,13 +634,22 @@ class ShopApp(ft.Column):
                            ft.Colors.GREEN_600)
         limpar_carrinho()
         self.show_snackbar("Pedido finalizado. Obrigado pela compra!", ft.Colors.GREEN_700)
-        await ft.async_sleep(2)
+        await asyncio.sleep(2)
         self.show_main_menu()
 
     async def _cancel_order(self, method_name: str):
         self.show_snackbar(f"Pagamento via {method_name} cancelado.", ft.Colors.ORANGE_500)
-        await ft.async_sleep(1)
+        await asyncio.sleep(1)
         self.show_main_menu()
 
     def exit_app(self, e):
-        self.page.window_destroy()
+        try:
+
+            if hasattr(self.page, "window_destroy"):
+                self.page.window_destroy()
+            elif hasattr(self.page, "window_close"):
+                self.page.window_close()
+            else:
+                raise AttributeError
+        except AttributeError:
+            self.show_snackbar("Não é possível fechar automaticamente no navegador. Feche a aba.", ft.Colors.ORANGE_500)
