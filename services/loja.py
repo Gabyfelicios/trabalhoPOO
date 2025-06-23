@@ -440,7 +440,7 @@ class ShopApp(ft.Column):
         self._update_page_content(content)
 
     def show_fechar_pedido(self, e):
-        self.cart_items = listar_carrinho() #
+        self.cart_items = listar_carrinho() #teste
         if not self.cart_items:
             self.show_snackbar("Carrinho vazio. Nada para finalizar.", ft.Colors.ORANGE_500)
             self._update_page_content([  
