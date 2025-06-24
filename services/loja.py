@@ -26,11 +26,10 @@ IMAGE_DIR = "product_images"
 
 
 class ShopApp(ft.Column):
-    def __init__(self, page: ft.Page, snackbar_text: ft.Text):
+    def __init__(self, page: ft.Page):
         super().__init__()
         self.page = page
         self.page.clean()
-        self.snackbar_text = snackbar_text
 
         self.page.appbar = ft.AppBar(
             title=ft.Text("POO Shop - Loja Virtual", weight=ft.FontWeight.BOLD),
@@ -97,8 +96,11 @@ class ShopApp(ft.Column):
         self._update_page_content(menu_content)
 
     def show_snackbar(self, message: str, color=ft.Colors.GREEN_500):
-        self.snackbar_text.value = message
-        self.page.snack_bar.bgcolor = color
+        self.page.snack_bar = ft.SnackBar(
+            ft.Text(message),
+            bgcolor=color,
+            duration=2000,
+        )
         self.page.snack_bar.open = True
         self.page.update()
 
